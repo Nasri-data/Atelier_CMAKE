@@ -1,0 +1,104 @@
+
+name: Automatisation des tests
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  Compilation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configuration CMake
+        run: cmake -S . -B build
+
+      - name: Compilation
+        run: cmake --build build
+
+  Test_Add:
+    runs-on: ubuntu-latest
+    needs: Compilation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: cmake -S . -B build && cmake --build build
+
+      - name: Test addition et rapport
+        shell: bash
+        run: |
+          mkdir -p build
+          set +e
+          ./build/src/calculator add 10 5 2>&1 | tee build/report-add.txt
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "Code de retour : $status" >> build/report-add.txt
+          exit "$status"
+
+      - name: Upload rapport addition
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-add-report
+          path: build/report-add.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  Test_Car:
+    runs-on: ubuntu-latest
+    needs: Compilation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: cmake -S . -B build && cmake --build build
+
+      - name: Test carré et rapport
+        shell: bash
+        run: |
+          mkdir -p build
+          echo "=== Test fonction car ===" > build/report-car.txt
+          echo "Commande : calculator car 5" >> build/report-car.txt
+          echo "Résultat attendu : 25" >> build/report-car.txt
+
+          set +e
+          ./build/src/calculator car 5 2>&1 | tee -a build/report-car.txt
+          status=${PIPESTATUS[0]}
+          set -e
+
+          echo "Code de retour : $status" >> build/report-car.txt
+
+          if [ "$status" -eq 0 ]; then
+            echo "Statut : SUCCES" >> build/report-car.txt
+          else
+            echo "Statut : ECHEC" >> build/report-car.txt
+          fi
+
+          exit "$status"
+
+      - name: Upload rapport carré
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-car-report
+          path: build/report-car.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Résumé du test carré
+        if: ${{ always() }}
+        run: |
+          echo "### Résultat du test car" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f build/report-car.txt ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            cat build/report-car.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Le rapport n'a pas été créé." >> "$GITHUB_STEP_SUMMARY"
+          fi
